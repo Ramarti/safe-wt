@@ -12,9 +12,12 @@ contract SuperSafe is InputSanitizer, ReentrancyGuard {
     using TokenLib for TokenLib.Token;
     using Address for address payable;
 
-    event DepositReceived(TokenLib.Token token, address depositor, uint256 amount);
+    event DepositReceived(TokenLib.Token indexed token, address indexed depositor, uint256 amount);
+    event WithdrawalExecuted(TokenLib.Token indexed token, address indexed depositor, uint256 amount);
+
     error NativeDepositUnderfunded();
     error NonNativeDepositMustNotSendNative();
+    error NothingToWithdraw();
 
     // depositor => token => amount
     mapping(address => mapping(TokenLib.Token => uint256)) public deposits;
@@ -35,5 +38,15 @@ contract SuperSafe is InputSanitizer, ReentrancyGuard {
         }
         deposits[msg.sender][token] = amount;
         emit DepositReceived(token, msg.sender, amount);
+    }
+
+    function withdraw(TokenLib.Token token) external nonReentrant {
+        uint256 deposited = deposits[msg.sender][token];
+        if (deposited == 0) {
+            revert NothingToWithdraw();
+        }
+        deposits[msg.sender][token] = 0;
+        token.transfer(msg.sender, deposited);
+        emit WithdrawalExecuted(token, msg.sender, deposited);
     }
 }

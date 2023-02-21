@@ -27,6 +27,21 @@ describe('SuperSafe', function () {
         return { safe, token, owner, depositor, DEPOSIT_AMOUNT };
     }
 
+    async function deploySafeAndDepositNative() {
+        const testEnv = await deploySafe();
+        await testEnv.safe
+            .connect(testEnv.depositor)
+            .deposit(NATIVE_TOKEN_ADDRESS, testEnv.DEPOSIT_AMOUNT, { value: testEnv.DEPOSIT_AMOUNT });
+        return testEnv;
+    }
+
+    async function deploySafeAndDepositERC20() {
+        const testEnv = await deploySafe();
+        await testEnv.token.connect(testEnv.depositor).approve(testEnv.safe.address, testEnv.DEPOSIT_AMOUNT);
+        await testEnv.safe.connect(testEnv.depositor).deposit(testEnv.token.address, testEnv.DEPOSIT_AMOUNT);
+        return testEnv;
+    }
+
     describe('Deployment', function () {
         it('Deployment is correctly configured', async function () {
             const { safe } = await loadFixture(deploySafe);
@@ -65,7 +80,9 @@ describe('SuperSafe', function () {
                 const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
                 await expect(
                     safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
-                ).to.emit(safe, 'DepositReceived').withArgs(NATIVE_TOKEN_ADDRESS, depositor.address, DEPOSIT_AMOUNT);
+                )
+                    .to.emit(safe, 'DepositReceived')
+                    .withArgs(NATIVE_TOKEN_ADDRESS, depositor.address, DEPOSIT_AMOUNT);
             });
         });
 
@@ -73,9 +90,7 @@ describe('SuperSafe', function () {
             it('should deposit asset', async function () {
                 const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
                 await expect(
-                    await safe
-                        .connect(depositor)
-                        .deposit(token.address, DEPOSIT_AMOUNT)
+                    await safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT)
                 ).to.changeTokenBalances(token, [safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
                 expect(await safe.deposits(depositor.address, token.address)).to.eq(DEPOSIT_AMOUNT);
             });
@@ -89,9 +104,60 @@ describe('SuperSafe', function () {
             it('should emit event', async function () {
                 const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
                 await token.connect(depositor).approve(safe.address, DEPOSIT_AMOUNT);
-                await expect(
-                    safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT)
-                ).to.emit(safe, 'DepositReceived').withArgs(token.address, depositor.address, DEPOSIT_AMOUNT);
+                await expect(safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT))
+                    .to.emit(safe, 'DepositReceived')
+                    .withArgs(token.address, depositor.address, DEPOSIT_AMOUNT);
+            });
+        });
+    });
+
+    describe('Withdrawals', function () {
+        describe('Native asset', function () {
+            it('should not withdraw if not deposited', async function () {
+                const { safe, depositor } = await loadFixture(deploySafe);
+                await expect(safe.connect(depositor).withdraw(NATIVE_TOKEN_ADDRESS)).to.be.revertedWithCustomError(
+                    safe,
+                    'NothingToWithdraw'
+                );
+            });
+            it('should withdraw', async function () {
+                const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafeAndDepositNative);
+                await expect(await safe.connect(depositor).withdraw(NATIVE_TOKEN_ADDRESS)).to.changeEtherBalances(
+                    [safe, depositor],
+                    [-DEPOSIT_AMOUNT, DEPOSIT_AMOUNT]
+                );
+            });
+
+            it('should emit event', async function () {
+                const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafeAndDepositNative);
+                await expect(safe.connect(depositor).withdraw(NATIVE_TOKEN_ADDRESS))
+                    .to.emit(safe, 'WithdrawalExecuted')
+                    .withArgs(NATIVE_TOKEN_ADDRESS, depositor.address, DEPOSIT_AMOUNT);
+            });
+        });
+
+        describe('ERC20 asset', function () {
+            it('should not withdraw if not deposited', async function () {
+                const { safe, token, depositor } = await loadFixture(deploySafe);
+                await expect(safe.connect(depositor).withdraw(token.address)).to.be.revertedWithCustomError(
+                    safe,
+                    'NothingToWithdraw'
+                );
+            });
+            it('should withdraw', async function () {
+                const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafeAndDepositERC20);
+                await expect(await safe.connect(depositor).withdraw(token.address)).to.changeTokenBalances(
+                    token,
+                    [safe, depositor],
+                    [-DEPOSIT_AMOUNT, DEPOSIT_AMOUNT]
+                );
+            });
+
+            it('should emit event', async function () {
+                const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafeAndDepositERC20);
+                await expect(safe.connect(depositor).withdraw(token.address))
+                    .to.emit(safe, 'WithdrawalExecuted')
+                    .withArgs(token.address, depositor.address, DEPOSIT_AMOUNT);
             });
         });
     });
