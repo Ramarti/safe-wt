@@ -3,6 +3,9 @@ const {
     loadFixture
 } = require('@nomicfoundation/hardhat-network-helpers');
 const { expect } = require('chai');
+const { ethers } = require('hardhat');
+
+const NATIVE_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 describe('SuperSafe', function () {
     // We define a fixture to reuse the same setup in every test.
@@ -24,7 +27,42 @@ describe('SuperSafe', function () {
             const { safe } = await loadFixture(deploySafe);
             expect(safe.address).to.exist;
         });
+    });
 
-        it.skip('Should set the right owner', async function () {});
+    describe('Deposits', function () {
+        const DEPOSIT_AMOUNT = 1000;
+        describe('Native asset', async function () {
+            it('should deposit asset', async function () {
+                const { safe, depositor } = await loadFixture(deploySafe);
+                await expect(
+                    await safe
+                        .connect(depositor)
+                        .deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
+                ).to.changeEtherBalances([safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
+                expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
+            });
+            it('should fail if underfunded', async function () {
+                const { safe, depositor } = await loadFixture(deploySafe);
+                await expect(
+                    safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT - 1 })
+                ).to.be.revertedWithCustomError(safe, 'NativeDepositUnderfunded');
+            });
+
+            it('should return extra balance', async function () {
+                const { safe, depositor } = await loadFixture(deploySafe);
+                await expect(
+                    await safe
+                        .connect(depositor)
+                        .deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT + 555 })
+                ).to.changeEtherBalances([safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
+                expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
+            });
+            it('should emit event', async function () {
+                const { safe, depositor } = await loadFixture(deploySafe);
+                await expect(
+                    safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
+                ).to.emit(safe, 'DepositReceived').withArgs(NATIVE_TOKEN_ADDRESS, depositor.address, DEPOSIT_AMOUNT);
+            });
+        });
     });
 });
