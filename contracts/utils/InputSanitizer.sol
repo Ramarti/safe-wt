@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPLv3.0
 pragma solidity 0.8.17;
-import { TokenLib } from "./TokenLib.sol";
+import { TokenLib } from "../token/TokenLib.sol";
 
 abstract contract InputSanitizer {
     using TokenLib for TokenLib.Token;

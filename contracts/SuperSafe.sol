@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPLv3.0
 pragma solidity 0.8.17;
 
-import { TokenLib } from "./TokenLib.sol";
-import { InputSanitizer } from "./InputSanitizer.sol";
+import { TokenLib } from "./token/TokenLib.sol";
+import { InputSanitizer } from "./utils/InputSanitizer.sol";
 
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";

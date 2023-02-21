@@ -17,9 +17,14 @@ describe('SuperSafe', function () {
 
         const SuperSafe = await ethers.getContractFactory('SuperSafe');
         const safe = await SuperSafe.deploy();
-        await safe.deployed();
 
-        return { safe, owner, depositor };
+        const Token = await ethers.getContractFactory('MockERC20');
+        const token = await Token.deploy('Bucks', 'BCK', 18);
+        await token.mint(depositor.address, ethers.utils.parseEther('1000000'));
+        const DEPOSIT_AMOUNT = 1000;
+        await token.connect(depositor).approve(safe.address, DEPOSIT_AMOUNT);
+
+        return { safe, token, owner, depositor, DEPOSIT_AMOUNT };
     }
 
     describe('Deployment', function () {
@@ -30,10 +35,9 @@ describe('SuperSafe', function () {
     });
 
     describe('Deposits', function () {
-        const DEPOSIT_AMOUNT = 1000;
         describe('Native asset', async function () {
             it('should deposit asset', async function () {
-                const { safe, depositor } = await loadFixture(deploySafe);
+                const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
                 await expect(
                     await safe
                         .connect(depositor)
@@ -42,14 +46,14 @@ describe('SuperSafe', function () {
                 expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
             });
             it('should fail if underfunded', async function () {
-                const { safe, depositor } = await loadFixture(deploySafe);
+                const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
                 await expect(
                     safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT - 1 })
                 ).to.be.revertedWithCustomError(safe, 'NativeDepositUnderfunded');
             });
 
             it('should return extra balance', async function () {
-                const { safe, depositor } = await loadFixture(deploySafe);
+                const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
                 await expect(
                     await safe
                         .connect(depositor)
@@ -58,10 +62,36 @@ describe('SuperSafe', function () {
                 expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
             });
             it('should emit event', async function () {
-                const { safe, depositor } = await loadFixture(deploySafe);
+                const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
                 await expect(
                     safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
                 ).to.emit(safe, 'DepositReceived').withArgs(NATIVE_TOKEN_ADDRESS, depositor.address, DEPOSIT_AMOUNT);
+            });
+        });
+
+        describe('ERC20 asset', async function () {
+            it('should deposit asset', async function () {
+                const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
+                await expect(
+                    await safe
+                        .connect(depositor)
+                        .deposit(token.address, DEPOSIT_AMOUNT)
+                ).to.changeTokenBalances(token, [safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
+                expect(await safe.deposits(depositor.address, token.address)).to.eq(DEPOSIT_AMOUNT);
+            });
+            it('should fail if sending native for erc20 deposit', async function () {
+                const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
+                await token.connect(depositor).approve(safe.address, DEPOSIT_AMOUNT);
+                await expect(
+                    safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
+                ).to.be.revertedWithCustomError(safe, 'NonNativeDepositMustNotSendNative');
+            });
+            it('should emit event', async function () {
+                const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
+                await token.connect(depositor).approve(safe.address, DEPOSIT_AMOUNT);
+                await expect(
+                    safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT)
+                ).to.emit(safe, 'DepositReceived').withArgs(token.address, depositor.address, DEPOSIT_AMOUNT);
             });
         });
     });
