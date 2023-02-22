@@ -59,6 +59,13 @@ describe('SuperSafe', function () {
                         .deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
                 ).to.changeEtherBalances([safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
                 expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
+
+                await expect(
+                    await safe
+                        .connect(depositor)
+                        .deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
+                ).to.changeEtherBalances([safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
+                expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT * 2);
             });
             it('should fail if underfunded', async function () {
                 const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
@@ -93,6 +100,12 @@ describe('SuperSafe', function () {
                     await safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT)
                 ).to.changeTokenBalances(token, [safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
                 expect(await safe.deposits(depositor.address, token.address)).to.eq(DEPOSIT_AMOUNT);
+
+                await token.connect(depositor).approve(safe.address, DEPOSIT_AMOUNT);
+                await expect(
+                    await safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT)
+                ).to.changeTokenBalances(token, [safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
+                expect(await safe.deposits(depositor.address, token.address)).to.eq(DEPOSIT_AMOUNT * 2);
             });
             it('should fail if sending native for erc20 deposit', async function () {
                 const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);

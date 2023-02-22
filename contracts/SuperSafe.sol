@@ -19,6 +19,16 @@ contract SuperSafe is InputSanitizer, ReentrancyGuard {
     error NonNativeDepositMustNotSendNative();
     error NothingToWithdraw();
 
+    // Parts per million. 
+    uint32 public constant PPM_RESOLUTION = 1_000_000;
+    // 0.005 * PPM_RESOLUTION / 100
+    uint32 public constant WITHDRAWAL_FEE_PPM = 50;
+
+    struct SafeEntry {
+        uint256 deposit;
+        uint256 checkPoint;
+    }
+
     // depositor => token => amount
     mapping(address => mapping(TokenLib.Token => uint256)) public deposits;
 
@@ -36,7 +46,7 @@ contract SuperSafe is InputSanitizer, ReentrancyGuard {
             }
             token.transferFrom(msg.sender, address(this), amount);
         }
-        deposits[msg.sender][token] = amount;
+        deposits[msg.sender][token] += amount;
         emit DepositReceived(token, msg.sender, amount);
     }
 
@@ -48,5 +58,9 @@ contract SuperSafe is InputSanitizer, ReentrancyGuard {
         deposits[msg.sender][token] = 0;
         token.transfer(msg.sender, deposited);
         emit WithdrawalExecuted(token, msg.sender, deposited);
+    }
+
+    function currentFees(TokenLib.Token token, address depositor) public returns(uint256) {
+
     }
 }
