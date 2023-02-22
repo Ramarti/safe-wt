@@ -20,6 +20,8 @@
     "@typechain/ethers-v5": "^10.1.0",
     "@typechain/hardhat": "^6.1.2",
     "chai": "^4.2.0",
+    "chai-decimaljs": "^0.0.1",
+    "decimal.js": "^10.4.3",
     "eslint": "^8.0.1",
     "eslint-config-prettier": "^8.6.0",
     "eslint-config-standard": "^17.0.0",

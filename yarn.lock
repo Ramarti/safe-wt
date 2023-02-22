@@ -1478,6 +1478,11 @@ chai-as-promised@^7.1.1:
   dependencies:
     check-error "^1.0.2"
 
+chai-decimaljs@^0.0.1:
+  version "0.0.1"
+  resolved "https://registry.yarnpkg.com/chai-decimaljs/-/chai-decimaljs-0.0.1.tgz#2c29046c9337c165f8a45cfe65a34fa2387d7659"
+  integrity sha512-Ig1fs8cnYymxoUeCUVCFlz4qatCGFt2Z9LYGxKpzDpc2CAv8oj/nDayeQgj2MIfjWjwdWdI81xMTHdjynhW+uQ==
+
 chai@^4.2.0:
   version "4.3.7"
   resolved "https://registry.yarnpkg.com/chai/-/chai-4.3.7.tgz#ec63f6df01829088e8bf55fca839bcd464a8ec51"
@@ -1816,6 +1821,11 @@ decamelize@^4.0.0:
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/decamelize/-/decamelize-4.0.0.tgz#aa472d7bf660eb15f3494efd531cab7f2a709837"
   integrity sha512-9iE1PgSik9HeIIw2JO94IidnE3eBoQrFJ3w7sFuzSX4DpmZ3v5sZpUiV5Swcf6mQEF+Y0ru8Neo+p+nyh2J+hQ==
+
+decimal.js@^10.4.3:
+  version "10.4.3"
+  resolved "https://registry.yarnpkg.com/decimal.js/-/decimal.js-10.4.3.tgz#1044092884d245d1b7f65725fa4ad4c6f781cc23"
+  integrity sha512-VBBaLc1MgL5XpzgIP7ny5Z6Nx3UrRkIViUkPUdtl9aya5amy3De1gsUUSB1g3+3sExYNjCAsAznmukyxCb1GRA==
 
 deep-eql@^4.0.1, deep-eql@^4.1.2:
   version "4.1.3"

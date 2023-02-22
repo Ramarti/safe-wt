@@ -2,8 +2,11 @@ const {
     // time,
     loadFixture
 } = require('@nomicfoundation/hardhat-network-helpers');
-const { expect } = require('chai');
+const chai = require('chai');
+const { expect } = chai;
 const { ethers } = require('hardhat');
+const { Decimal } = require('decimal.js');
+chai.use(require('chai-decimaljs')(Decimal));
 
 const NATIVE_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
@@ -23,7 +26,6 @@ describe('SuperSafe', function () {
         await token.mint(depositor.address, ethers.utils.parseEther('1000000'));
         const DEPOSIT_AMOUNT = 1000;
         await token.connect(depositor).approve(safe.address, DEPOSIT_AMOUNT);
-
         return { safe, token, owner, depositor, DEPOSIT_AMOUNT };
     }
 
@@ -43,9 +45,17 @@ describe('SuperSafe', function () {
     }
 
     describe('Deployment', function () {
-        it('Deployment is correctly configured', async function () {
+        it('fee is calculated well', async function () {
             const { safe } = await loadFixture(deploySafe);
-            expect(safe.address).to.exist;
+
+            const dailyFee = Decimal('0.005').div('100');
+            const secondsInDay = 24 * 60 * 60;
+            const expectedFeePerSecond = dailyFee.div(secondsInDay);
+
+            const contractScaledFeePerSecond = Decimal((await safe.WITHDRAWAL_FEE_PER_SECOND_SCALED()).toString());
+            const precision = Decimal((await safe.SCALE_RESOLUTION()).toString());
+            const deScaledFeePerSecond = contractScaledFeePerSecond.div(precision);
+            expect(deScaledFeePerSecond).to.be.decimal.closeTo(expectedFeePerSecond, Decimal('0.00000001'));
         });
     });
 
@@ -58,14 +68,14 @@ describe('SuperSafe', function () {
                         .connect(depositor)
                         .deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
                 ).to.changeEtherBalances([safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
-                expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
+                expect(await safe.depositFor(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
 
                 await expect(
                     await safe
                         .connect(depositor)
                         .deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT })
                 ).to.changeEtherBalances([safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
-                expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT * 2);
+                expect(await safe.depositFor(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT * 2);
             });
             it('should fail if underfunded', async function () {
                 const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
@@ -81,7 +91,7 @@ describe('SuperSafe', function () {
                         .connect(depositor)
                         .deposit(NATIVE_TOKEN_ADDRESS, DEPOSIT_AMOUNT, { value: DEPOSIT_AMOUNT + 555 })
                 ).to.changeEtherBalances([safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
-                expect(await safe.deposits(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
+                expect(await safe.depositFor(depositor.address, NATIVE_TOKEN_ADDRESS)).to.eq(DEPOSIT_AMOUNT);
             });
             it('should emit event', async function () {
                 const { safe, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);
@@ -99,13 +109,13 @@ describe('SuperSafe', function () {
                 await expect(
                     await safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT)
                 ).to.changeTokenBalances(token, [safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
-                expect(await safe.deposits(depositor.address, token.address)).to.eq(DEPOSIT_AMOUNT);
+                expect(await safe.depositFor(depositor.address, token.address)).to.eq(DEPOSIT_AMOUNT);
 
                 await token.connect(depositor).approve(safe.address, DEPOSIT_AMOUNT);
                 await expect(
                     await safe.connect(depositor).deposit(token.address, DEPOSIT_AMOUNT)
                 ).to.changeTokenBalances(token, [safe, depositor], [DEPOSIT_AMOUNT, -DEPOSIT_AMOUNT]);
-                expect(await safe.deposits(depositor.address, token.address)).to.eq(DEPOSIT_AMOUNT * 2);
+                expect(await safe.depositFor(depositor.address, token.address)).to.eq(DEPOSIT_AMOUNT * 2);
             });
             it('should fail if sending native for erc20 deposit', async function () {
                 const { safe, token, depositor, DEPOSIT_AMOUNT } = await loadFixture(deploySafe);

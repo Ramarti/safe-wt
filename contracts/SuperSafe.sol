@@ -6,6 +6,9 @@ import { InputSanitizer } from "./utils/InputSanitizer.sol";
 
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import "hardhat/console.sol";
 
 contract SuperSafe is InputSanitizer, ReentrancyGuard {
     
@@ -19,18 +22,24 @@ contract SuperSafe is InputSanitizer, ReentrancyGuard {
     error NonNativeDepositMustNotSendNative();
     error NothingToWithdraw();
 
-    // Parts per million. 
-    uint32 public constant PPM_RESOLUTION = 1_000_000;
-    // 0.005 * PPM_RESOLUTION / 100
-    uint32 public constant WITHDRAWAL_FEE_PPM = 50;
+    uint256 public constant SCALE_RESOLUTION = 1*10**18;
+    uint256 private constant SECONDS_IN_DAY = (24*60*60);
+    // 0.005% --> 0.005 / 100 * SCALE_RESOLUTION = 5*10^-5 * 1*10^18
+    uint256 public constant FEE_DAILY_SCALED = 5*10**(18-5);
+
+    uint256 public immutable WITHDRAWAL_FEE_PER_SECOND_SCALED;
 
     struct SafeEntry {
         uint256 deposit;
         uint256 checkPoint;
     }
 
+    constructor() {
+        WITHDRAWAL_FEE_PER_SECOND_SCALED = FEE_DAILY_SCALED / (24*60*60);
+    }
+
     // depositor => token => amount
-    mapping(address => mapping(TokenLib.Token => uint256)) public deposits;
+    mapping(address => mapping(TokenLib.Token => SafeEntry)) public entries;
 
     function deposit(TokenLib.Token token, uint256 amount) external nonReentrant nonZeroToken(token) payable {
         if (token.isNative()) {
@@ -46,21 +55,30 @@ contract SuperSafe is InputSanitizer, ReentrancyGuard {
             }
             token.transferFrom(msg.sender, address(this), amount);
         }
-        deposits[msg.sender][token] += amount;
+        SafeEntry storage se = entries[msg.sender][token];
+        se.deposit += amount;
+        se.checkPoint = block.timestamp;
         emit DepositReceived(token, msg.sender, amount);
     }
 
     function withdraw(TokenLib.Token token) external nonReentrant {
-        uint256 deposited = deposits[msg.sender][token];
-        if (deposited == 0) {
+        uint256 amount = (entries[msg.sender][token]).deposit;
+        if (amount == 0) {
             revert NothingToWithdraw();
         }
-        deposits[msg.sender][token] = 0;
-        token.transfer(msg.sender, deposited);
-        emit WithdrawalExecuted(token, msg.sender, deposited);
+        entries[msg.sender][token] = SafeEntry({ deposit: 0, checkPoint: 0 });
+        token.transfer(msg.sender, amount);
+        emit WithdrawalExecuted(token, msg.sender, amount);
     }
 
-    function currentFees(TokenLib.Token token, address depositor) public returns(uint256) {
-
+    function depositFor(address depositor, TokenLib.Token token) external view  returns(uint256) {
+        return (entries[depositor][token]).deposit;
     }
+    /*
+    function currentFees(TokenLib.Token token, address depositor) public view returns(uint256) {
+        SafeEntry storage se = entries[depositor][token];
+        
+        return Math.mulDiv(se.deposit, WITHDRAWAL_FEE_PPM, PPM_RESOLUTION);
+    }
+    */
 }
