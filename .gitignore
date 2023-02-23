@@ -9,3 +9,7 @@ typechain-types
 cache
 artifacts
 
+.coverage_artifacts
+.coverage_contracts
+/coverage
+/coverage.json
