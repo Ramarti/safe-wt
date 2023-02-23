@@ -41,6 +41,11 @@ abstract contract SafeEntryManager {
         acc.checkPoint = block.timestamp;
     }
 
+    function _withdrawFee(SafeEntry storage acc, uint256 delta) internal {
+        _accrueFee(acc);
+        acc.accruedFees -= delta;
+    }
+
     function _nonAccruedFees(SafeEntry storage acc) internal view returns (uint256) {
         uint256 deltaTime = (acc.checkPoint >= block.timestamp || acc.checkPoint == 0)
             ? 0
