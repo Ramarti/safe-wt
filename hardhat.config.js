@@ -26,13 +26,14 @@ module.exports = {
                 mnemonic: process.env.GOERLI_MNEMONIC,
             }
         },
-        /*tenderly: {
+        tenderly: {
             chainId: 1,
             url: `https://rpc.tenderly.co/fork/${process.env.TENDERLY_FORK_ID}`,
             autoImpersonate: true,
             saveDeployments: true,
-            live: true
-        }*/
+            live: true,
+            privateVerification: false
+        }
     },
     tenderly: {
         forkNetwork: '1',

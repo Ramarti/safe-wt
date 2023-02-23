@@ -2,5 +2,9 @@
   "goerli": {
     "safe": "0x9C05Ef1f8363062D4735C0aF39Fcb8d4F7Ae6D75",
     "token": "0xa146BcA71d8e505c78d1726f025142d3abaACB6e"
+  },
+  "tenderly": {
+    "safe": "0x3E6Ce8846e2cAeD6FfAB0c589811F3A4ba6c4D27",
+    "token": "0xde5bDc0A9914142048b43D374A93a0480bd7ae73"
   }
 }
