@@ -6,6 +6,14 @@ abstract contract InputSanitizer {
     using TokenLib for TokenLib.Token;
 
     error ZeroAddress();
+    error ZeroAmount();
+
+    modifier nonZeroAmount(uint256 input) {
+        if (input == 0) {
+            revert ZeroAmount();
+        }
+        _;
+    }
 
     modifier nonZeroAddress(address input) {
         if (input == address(0)) {

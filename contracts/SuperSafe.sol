@@ -3,45 +3,32 @@ pragma solidity 0.8.17;
 
 import { TokenLib } from "./token/TokenLib.sol";
 import { InputSanitizer } from "./utils/InputSanitizer.sol";
-
+import { SafeEntryManager } from "./utils/SafeEntryManager.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "hardhat/console.sol";
-
-contract SuperSafe is InputSanitizer, ReentrancyGuard {
-    
-    using TokenLib for TokenLib.Token;
+contract SuperSafe is InputSanitizer, SafeEntryManager, ReentrancyGuard, Ownable2Step {
     using Address for address payable;
+    using TokenLib for TokenLib.Token;
 
     event DepositReceived(TokenLib.Token indexed token, address indexed depositor, uint256 amount);
     event WithdrawalExecuted(TokenLib.Token indexed token, address indexed depositor, uint256 amount);
+    event FeeAccrued(TokenLib.Token indexed token, uint256 amount);
+    event FeeWithdrawalExecuted(TokenLib.Token indexed token, address destination, uint256 amount);
 
     error NativeDepositUnderfunded();
     error NonNativeDepositMustNotSendNative();
-    error NothingToWithdraw();
-
-    uint256 public constant SCALE_RESOLUTION = 1*10**18;
-    uint256 private constant SECONDS_IN_DAY = (24*60*60);
-    // 0.005% --> 0.005 / 100 * SCALE_RESOLUTION = 5*10^-5 * 1*10^18
-    uint256 public constant FEE_DAILY_SCALED = 5*10**(18-5);
-
-    uint256 public immutable WITHDRAWAL_FEE_PER_SECOND_SCALED;
-
-    struct SafeEntry {
-        uint256 deposit;
-        uint256 checkPoint;
-    }
-
-    constructor() {
-        WITHDRAWAL_FEE_PER_SECOND_SCALED = FEE_DAILY_SCALED / (24*60*60);
-    }
+    error WithdrawalTooBig();
 
     // depositor => token => amount
-    mapping(address => mapping(TokenLib.Token => SafeEntry)) public entries;
+    mapping(address => mapping(TokenLib.Token => SafeEntry)) private _entries;
+    mapping(TokenLib.Token => SafeEntry) private _ownerFees;
 
-    function deposit(TokenLib.Token token, uint256 amount) external nonReentrant nonZeroToken(token) payable {
+    constructor(uint256 __rate, uint256 __resolution) SafeEntryManager(__rate, __resolution) Ownable2Step() {}
+
+    function deposit(TokenLib.Token token, uint256 amount) external payable nonReentrant nonZeroToken(token) nonZeroAmount(amount) {
         if (token.isNative()) {
             if (msg.value < amount) {
                 revert NativeDepositUnderfunded();
@@ -55,30 +42,57 @@ contract SuperSafe is InputSanitizer, ReentrancyGuard {
             }
             token.transferFrom(msg.sender, address(this), amount);
         }
-        SafeEntry storage se = entries[msg.sender][token];
-        se.deposit += amount;
-        se.checkPoint = block.timestamp;
+        _incrementDeposit(_entries[msg.sender][token], amount);
+        _incrementDeposit(_ownerFees[token], amount);
+
         emit DepositReceived(token, msg.sender, amount);
     }
 
     function withdraw(TokenLib.Token token) external nonReentrant {
-        uint256 amount = (entries[msg.sender][token]).deposit;
+        SafeEntry storage se = _entries[msg.sender][token];
+        uint256 amount = availableForWithdrawal(token, msg.sender);
         if (amount == 0) {
-            revert NothingToWithdraw();
+            revert WithdrawalTooBig();
         }
-        entries[msg.sender][token] = SafeEntry({ deposit: 0, checkPoint: 0 });
+        _decrementDeposit(se, se.deposit);
+        _decrementDeposit(_ownerFees[token], se.deposit);
+
         token.transfer(msg.sender, amount);
         emit WithdrawalExecuted(token, msg.sender, amount);
     }
 
-    function depositFor(address depositor, TokenLib.Token token) external view  returns(uint256) {
-        return (entries[depositor][token]).deposit;
+    function collectFees(TokenLib.Token token, address to) external nonZeroAddress(to) onlyOwner nonReentrant {
+        uint256 amount = currentOwnerFees(token);
+        if (amount == 0) {
+            revert WithdrawalTooBig();
+        }
+        _decrementDeposit(_ownerFees[token], amount);
+        token.transfer(to, amount);
+        emit FeeWithdrawalExecuted(token, to, amount);
     }
-    /*
-    function currentFees(TokenLib.Token token, address depositor) public view returns(uint256) {
-        SafeEntry storage se = entries[depositor][token];
-        
-        return Math.mulDiv(se.deposit, WITHDRAWAL_FEE_PPM, PPM_RESOLUTION);
+
+    function depositedFor(address depositor, TokenLib.Token token) external view returns (uint256) {
+        return _entries[depositor][token].deposit;
     }
-    */
+
+    function availableForWithdrawal(TokenLib.Token token, address depositor) public view returns(uint256) {
+        uint256 deposited = _entries[depositor][token].deposit;
+        uint256 currentFee = _currentFee(_entries[depositor][token]);
+        if (currentFee >= deposited || deposited == 0) {
+            return 0;
+        }
+        return deposited - currentFee;
+    }
+
+    function currentDepositorFees(TokenLib.Token token, address depositor) external view returns (uint256) {
+        return Math.min(_currentFee(_entries[depositor][token]), _entries[depositor][token].deposit);
+    }
+
+    /**
+     * Returns the current owner fees for a token. 
+     * @param token address
+     */
+    function currentOwnerFees(TokenLib.Token token) public view returns (uint256) {
+        return Math.min(_currentFee(_ownerFees[token]), _ownerFees[token].deposit);
+    }
 }
