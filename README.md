@@ -16,7 +16,7 @@ It holds any erc20 token for a daily fee of 0.005%, the owner of the contract ca
 
 - [x] You should deploy the contract to a tenderly fork
 
-- [ ] bonus points: write a simple script that interacts with the fork and performs deposits/withdrawals/collection.
+- [x] bonus points: write a simple script that interacts with the fork and performs deposits/withdrawals/collection.
 
 
 ## Install
@@ -50,4 +50,9 @@ npx hardhat --network goerli run scripts/deploy.js
 ## Deploy to Tenderly fork
 ```shell
 npx hardhat --network tendely run scripts/deploy.js 
+```
+
+## Interact with Tenderly fork
+```shell
+npx hardhat --network tendely run scripts/forkInteraction.js 
 ```
