@@ -425,6 +425,14 @@ describe('SuperSafe', function () {
                 );
             });
 
+            it('should not collect if no fees', async function () {
+                const { safe, token, owner } = await loadFixture(deploySafe);
+                await expect(
+                    safe.connect(owner).collectFees(token.address, owner.address)
+                ).to.be.revertedWithCustomError(safe, 'WithdrawalTooBig');
+            });
+
+
             it('should keep accumulating after collecting fees', async function () {
                 const { safe, depositor, owner } = await loadFixture(deploySafe);
                 await safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {

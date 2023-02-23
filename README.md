@@ -8,11 +8,11 @@ It holds any erc20 token for a daily fee of 0.005%, the owner of the contract ca
 
 - [x] includes a withdraw function
 
-- [ ] includes a collectFees function, only accessible to the owner of the contracts, transfers the collected fees to a specified address
+- [x] includes a collectFees function, only accessible to the owner of the contracts, transfers the collected fees to a specified address
 
-- [ ] contract should be secured, safe from the common pitfalls such as a reentry attack.
+- [x] contract should be secured, safe from the common pitfalls such as a reentry attack.
 
-- [ ] contract should have 100% test coverage
+- [x] contract should have 100% test coverage
 
 - [ ] You should deploy the contract to a tenderly fork
 
@@ -25,6 +25,11 @@ yarn
 ```
 
 ## Run tests
+```shell
+yarn test
+```
+
+## Run tests coverage
 ```shell
 yarn test
 ```

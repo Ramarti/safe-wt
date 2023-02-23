@@ -1,4 +1,4 @@
-const { time, loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
+const { loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
 const chai = require('chai');
 const { expect } = chai;
 const { ethers } = require('hardhat');
