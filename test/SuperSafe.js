@@ -155,9 +155,10 @@ describe('SuperSafe', function () {
             it('should fail if zero amount', async function () {
                 const { safe, token, depositor } = await loadFixture(deploySafe);
                 await token.connect(depositor).approve(safe.address, SMALL_DEPOSIT);
-                await expect(
-                    safe.connect(depositor).deposit(token.address, 0)
-                ).to.be.revertedWithCustomError(safe, 'ZeroAmount');
+                await expect(safe.connect(depositor).deposit(token.address, 0)).to.be.revertedWithCustomError(
+                    safe,
+                    'ZeroAmount'
+                );
             });
             it('should emit event', async function () {
                 const { safe, token, depositor } = await loadFixture(deploySafe);
@@ -212,33 +213,6 @@ describe('SuperSafe', function () {
                     ethers.constants.Zero
                 );
             });
-
-            it.skip('should collect fees', async function () {
-                const { safe, depositor, owner } = await loadFixture(deploySafe);
-                expect(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS)).to.eq('0');
-
-                const depositTime = await getTimestamp(
-                    await safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {
-                        value: eth('1000')
-                    })
-                );
-                await time.increaseTo(depositTime + DAY_SECONDS);
-
-                const expectedFee = Decimal('1000').mul(DAILY_FEE_PERCENT);
-                const fee = ethBnToDecimal(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS));
-                expect(fee).to.be.decimal.closeTo(expectedFee, '0.0000001');
-                // console.log('expectedFee', expectedFee);
-
-                const initBalance = ethBnToDecimal(await owner.getBalance());
-                // console.log(initBalance);
-
-                await safe.connect(owner).collectFees(NATIVE_TOKEN_ADDRESS, owner.address);
-                // console.log(ethBnToDecimal(await owner.getBalance()));
-                expect(ethBnToDecimal(await owner.getBalance())).to.be.decimal.closeTo(
-                    initBalance.add(fee),
-                    '0.0000001'
-                );
-            });
         });
 
         describe('ERC20 asset', function () {
@@ -276,26 +250,10 @@ describe('SuperSafe', function () {
                     ethers.constants.Zero
                 );
             });
-
-            it.skip('should collect fees', async function () {});
         });
     });
 
     describe('Fees', function () {
-        it('should not collect fees if not owner', async function () {
-            const { safe, token, depositor } = await loadFixture(deploySafe);
-            await expect(safe.connect(depositor).collectFees(token.address, depositor.address)).to.be.revertedWith(
-                'Ownable: caller is not the owner'
-            );
-        });
-
-        it('should not collect fees to a zero address', async function () {
-            const { safe, token, owner } = await loadFixture(deploySafe);
-            await expect(
-                safe.connect(owner).collectFees(token.address, ethers.constants.AddressZero)
-            ).to.be.revertedWithCustomError(safe, 'ZeroAddress');
-        });
-
         it('should increment fees with time', async function () {
             const { safe, depositor } = await loadFixture(deploySafe);
 
@@ -404,7 +362,7 @@ describe('SuperSafe', function () {
                     decimalToEth(DAILY_FEE_PERCENT.mul('2000')),
                     eth('0.0000001')
                 );
-                
+
                 expect(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS)).to.be.closeTo(
                     decimalToEth(DAILY_FEE_PERCENT.mul('1000')),
                     eth('0.0000001')
@@ -420,6 +378,115 @@ describe('SuperSafe', function () {
             });
 
             it.skip('should work with ERC20 of decimals other than 18');
+        });
+
+        describe('Collection', async function () {
+            it('should not collect fees if not owner', async function () {
+                const { safe, token, depositor } = await loadFixture(deploySafe);
+                await expect(safe.connect(depositor).collectFees(token.address, depositor.address)).to.be.revertedWith(
+                    'Ownable: caller is not the owner'
+                );
+            });
+    
+            it('should not collect fees to a zero address', async function () {
+                const { safe, token, owner } = await loadFixture(deploySafe);
+                await expect(
+                    safe.connect(owner).collectFees(token.address, ethers.constants.AddressZero)
+                ).to.be.revertedWithCustomError(safe, 'ZeroAddress');
+            });
+
+            it('should collect fees', async function () {
+                const { safe, depositor, depositor2, owner } = await loadFixture(deploySafe);
+                expect(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS)).to.be.zero;
+
+                await safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {
+                    value: eth('1000')
+                });
+                await time.increase(DAY_SECONDS);
+
+                let expectedFee = Decimal('1000').mul(DAILY_FEE_PERCENT);
+                let fee = await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS);
+                expect(fee).to.be.closeTo(decimalToEth(expectedFee), eth('0.0000001'));
+
+                await safe.connect(depositor2).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {
+                    value: eth('1000')
+                });
+                await time.increase(DAY_SECONDS);
+
+                expectedFee = expectedFee.add(Decimal('2000').mul(DAILY_FEE_PERCENT));
+                fee = await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS); 
+                expect(fee).to.be.closeTo(decimalToEth(expectedFee), eth('0.0001'));
+                
+                const initBalance = await owner.getBalance();
+                await safe.connect(owner).collectFees(NATIVE_TOKEN_ADDRESS, owner.address);
+                expect(await owner.getBalance()).to.be.closeTo(
+                    initBalance.add(decimalToEth(expectedFee)),
+                    eth('0.001')
+                );
+            });
+
+            it('should keep accumulating after collecting fees', async function () {
+                const { safe, depositor, owner } = await loadFixture(deploySafe);
+                await safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {
+                    value: eth('1000')
+                });
+                await time.increase(DAY_SECONDS);
+
+                const expectedFee = Decimal('1000').mul(DAILY_FEE_PERCENT);
+                let fee = await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS);
+                expect(fee).to.be.closeTo(decimalToEth(expectedFee), eth('0.0000001'));
+
+                let initBalance = await owner.getBalance();
+                await safe.connect(owner).collectFees(NATIVE_TOKEN_ADDRESS, owner.address);
+                expect(await owner.getBalance()).to.be.closeTo(
+                    initBalance.add(decimalToEth(expectedFee)),
+                    eth('0.001')
+                );
+                expect(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS)).to.be.zero;
+
+                await time.increase(DAY_SECONDS);
+
+                fee = await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS); 
+                expect(fee).to.be.closeTo(decimalToEth(expectedFee), eth('0.0001'));
+                
+                initBalance = await owner.getBalance();
+                await safe.connect(owner).collectFees(NATIVE_TOKEN_ADDRESS, owner.address);
+                expect(await owner.getBalance()).to.be.closeTo(
+                    initBalance.add(decimalToEth(expectedFee)),
+                    eth('0.001')
+                );
+            });
+
+            it('should stop accumulating fees if they withdraw', async function () {
+                const { safe, depositor, owner } = await loadFixture(deploySafe);
+
+                await safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {
+                    value: eth('1000')
+                });
+                await time.increase(DAY_SECONDS);
+
+                const expectedFee = Decimal('1000').mul(DAILY_FEE_PERCENT);
+
+                let fee = await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS);
+                expect(fee).to.be.closeTo(decimalToEth(expectedFee), eth('0.0000001'));
+
+                await safe.connect(depositor).withdraw(NATIVE_TOKEN_ADDRESS);
+
+                fee = await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS);
+                expect(fee).to.be.closeTo(decimalToEth(expectedFee), eth('0.0001'));
+
+                await time.increase(DAY_SECONDS);
+                fee = await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS); 
+                expect(fee).to.be.closeTo(decimalToEth(expectedFee), eth('0.0001'));
+                
+                const initBalance = await owner.getBalance();
+                await safe.connect(owner).collectFees(NATIVE_TOKEN_ADDRESS, owner.address);
+                expect(await owner.getBalance()).to.be.closeTo(
+                    initBalance.add(decimalToEth(expectedFee)),
+                    eth('0.001')
+                );
+            });
+            
         });
     });
 });
