@@ -50,15 +50,17 @@ contract SuperSafe is InputSanitizer, SafeEntryManager, ReentrancyGuard, Ownable
 
     function withdraw(TokenLib.Token token) external nonReentrant {
         SafeEntry storage se = _entries[msg.sender][token];
-        uint256 amount = availableForWithdrawal(token, msg.sender);
-        if (amount == 0) {
+        
+        uint256 toWithdraw = availableForWithdrawal(token, msg.sender);
+        if (toWithdraw == 0) {
             revert WithdrawalTooBig();
         }
-        _decrementDeposit(se, se.deposit);
-        _decrementDeposit(_ownerFees[token], se.deposit);
+        uint256 depositDelta = se.deposit;
+        _decrementDeposit(se, depositDelta);
+        _decrementDeposit(_ownerFees[token], depositDelta);
 
-        token.transfer(msg.sender, amount);
-        emit WithdrawalExecuted(token, msg.sender, amount);
+        token.transfer(msg.sender, toWithdraw);
+        emit WithdrawalExecuted(token, msg.sender, toWithdraw);
     }
 
     function collectFees(TokenLib.Token token, address to) external nonZeroAddress(to) onlyOwner nonReentrant {
@@ -66,7 +68,7 @@ contract SuperSafe is InputSanitizer, SafeEntryManager, ReentrancyGuard, Ownable
         if (amount == 0) {
             revert WithdrawalTooBig();
         }
-        _decrementDeposit(_ownerFees[token], amount);
+        _withdrawFee(_ownerFees[token], amount);
         token.transfer(to, amount);
         emit FeeWithdrawalExecuted(token, to, amount);
     }
@@ -93,6 +95,9 @@ contract SuperSafe is InputSanitizer, SafeEntryManager, ReentrancyGuard, Ownable
      * @param token address
      */
     function currentOwnerFees(TokenLib.Token token) public view returns (uint256) {
-        return Math.min(_currentFee(_ownerFees[token]), _ownerFees[token].deposit);
+        if (_ownerFees[token].deposit > 0) {
+            return Math.min(_currentFee(_ownerFees[token]), _ownerFees[token].deposit);
+        }
+        return _currentFee(_ownerFees[token]);
     }
 }
