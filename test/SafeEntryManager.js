@@ -3,7 +3,6 @@ const chai = require('chai');
 const { expect } = chai;
 const { ethers } = require('hardhat');
 const { Decimal } = require('decimal.js');
-const { BigNumber } = require('ethers');
 chai.use(require('chai-decimaljs')(Decimal));
 
 const DAY_SECONDS = 24 * 60 * 60;
@@ -16,11 +15,8 @@ async function getTimestamp(tx) {
     return timestamp;
 }
 
-function bigNumberEtherToDecimal(bn) {
-    return Decimal(ethers.utils.formatEther(bn));
-}
 
-describe.only('FeeHandler', function () {
+describe('SafeEntryManager', function () {
     // We define a fixture to reuse the same setup in every test.
     // We use loadFixture to run this setup once, snapshot that state,
     // and reset Hardhat Network to that snapshot in every test.
@@ -28,8 +24,8 @@ describe.only('FeeHandler', function () {
         // Contracts are deployed using the first signer/account by default
         const [owner, depositor] = await ethers.getSigners();
 
-        const MockFeeHandler = await ethers.getContractFactory('MockFeeHandler');
-        const feeHandler = await MockFeeHandler.deploy(FEE_PER_SECOND_SCALED, RESOLUTION);
+        const MockSafeEntryManager = await ethers.getContractFactory('MockSafeEntryManager');
+        const feeHandler = await MockSafeEntryManager.deploy(FEE_PER_SECOND_SCALED, RESOLUTION);
 
         return { feeHandler, owner, depositor };
     }
@@ -41,8 +37,8 @@ describe.only('FeeHandler', function () {
         });
     });
 
-    describe.only('Accumulator', function () {
-        it('should increment with time', async function () {
+    describe('SafeEntry', function () {
+        it('should increment fees with time', async function () {
             const { feeHandler } = await loadFixture(deploy);
             const depositTime = await getTimestamp(await feeHandler.incrementDeposit(ethers.utils.parseEther('100')));
 
@@ -63,7 +59,7 @@ describe.only('FeeHandler', function () {
             expect(Decimal(ethers.utils.formatEther(currentFees))).to.decimal.closeTo('10', '0.001');
         });
 
-        it('should increment with time and other deposits', async function () {
+        it('should increment fees with time and other deposits', async function () {
             const { feeHandler } = await loadFixture(deploy);
             let depositTime = await getTimestamp(await feeHandler.incrementDeposit(ethers.utils.parseEther('100')));
 
@@ -82,7 +78,7 @@ describe.only('FeeHandler', function () {
             expect(Decimal(ethers.utils.formatEther(currentFees))).to.decimal.closeTo('220', '0.001');
         });
 
-        it('should increment less with time and withdrawals', async function () {
+        it('should increment fees less with time and withdrawals', async function () {
             const { feeHandler } = await loadFixture(deploy);
             let depositTime = await getTimestamp(await feeHandler.incrementDeposit(ethers.utils.parseEther('100')));
 
@@ -98,7 +94,7 @@ describe.only('FeeHandler', function () {
             expect(Decimal(ethers.utils.formatEther(currentFees))).to.decimal.closeTo('15', '0.001');
         });
 
-        it('should stop if resetted', async function () {
+        it('should stop accumulating fees if resetted', async function () {
             const { feeHandler } = await loadFixture(deploy);
             let depositTime = await getTimestamp(await feeHandler.incrementDeposit(ethers.utils.parseEther('100')));
 

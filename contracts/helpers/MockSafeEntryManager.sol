@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: GPLv3.0
 pragma solidity 0.8.17;
-import { FeeHandler } from "../utils/FeeHandler.sol";
+import { SafeEntryManager } from "../utils/SafeEntryManager.sol";
 
-contract MockFeeHandler is FeeHandler {
-    FeeAccumulator public acc;
+contract MockSafeEntryManager is SafeEntryManager {
+    SafeEntry public acc;
 
-    constructor(uint256 __rate, uint256 __resolution) FeeHandler() {
-        _setRate(__rate, __resolution);
-    }
-
-    function rate() external view returns(uint256, uint256) {
-        return (_rate, _resolution);
-    }
+    constructor(uint256 __rate, uint256 __resolution) SafeEntryManager(__rate, __resolution) {}
 
     function incrementDeposit(uint256 delta) external {
         _incrementDeposit(acc, delta);
