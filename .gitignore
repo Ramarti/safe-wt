@@ -13,3 +13,5 @@ artifacts
 .coverage_contracts
 /coverage
 /coverage.json
+
+tenderly.yaml
