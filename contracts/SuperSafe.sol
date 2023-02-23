@@ -28,7 +28,7 @@ contract SuperSafe is InputSanitizer, SafeEntryManager, ReentrancyGuard, Ownable
 
     constructor(uint256 __rate, uint256 __resolution) SafeEntryManager(__rate, __resolution) Ownable2Step() {}
 
-    function deposit(TokenLib.Token token, uint256 amount) external payable nonReentrant nonZeroToken(token) {
+    function deposit(TokenLib.Token token, uint256 amount) external payable nonReentrant nonZeroToken(token) nonZeroAmount(amount) {
         if (token.isNative()) {
             if (msg.value < amount) {
                 revert NativeDepositUnderfunded();
@@ -77,14 +77,22 @@ contract SuperSafe is InputSanitizer, SafeEntryManager, ReentrancyGuard, Ownable
 
     function availableForWithdrawal(TokenLib.Token token, address depositor) public view returns(uint256) {
         uint256 deposited = _entries[depositor][token].deposit;
-        return deposited == 0 ? 0 : deposited - _currentFee(_entries[depositor][token]);
+        uint256 currentFee = _currentFee(_entries[depositor][token]);
+        if (currentFee >= deposited || deposited == 0) {
+            return 0;
+        }
+        return deposited - currentFee;
     }
 
     function currentDepositorFees(TokenLib.Token token, address depositor) external view returns (uint256) {
-        return _currentFee(_entries[depositor][token]);
+        return Math.min(_currentFee(_entries[depositor][token]), _entries[depositor][token].deposit);
     }
 
+    /**
+     * Returns the current owner fees for a token. 
+     * @param token address
+     */
     function currentOwnerFees(TokenLib.Token token) public view returns (uint256) {
-        return _currentFee(_ownerFees[token]);
+        return Math.min(_currentFee(_ownerFees[token]), _ownerFees[token].deposit);
     }
 }

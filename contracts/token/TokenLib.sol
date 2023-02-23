@@ -14,8 +14,8 @@ library TokenLib {
     Token public constant NATIVE_TOKEN = Token.wrap(NATIVE_TOKEN_ADDRESS);
     uint8 public constant NATIVE_TOKEN_DECIMALS = 18;
 
-    modifier noopForNativeOrZeroAmount(Token token, uint256 amount) {
-        if (amount == 0 || TokenLib.isNative(token)) {
+    modifier noopForNative(Token token) {
+        if (TokenLib.isNative(token)) {
             return;
         }
         _;
@@ -34,7 +34,7 @@ library TokenLib {
         address from,
         address to,
         uint256 amount
-    ) internal noopForNativeOrZeroAmount(token, amount) {
+    ) internal noopForNative(token) {
         SafeERC20.safeTransferFrom(toIERC20(token), from, to, amount);
     }
 

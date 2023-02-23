@@ -32,6 +32,10 @@ function bnToDecimal(bn) {
     return Decimal(bn.toString());
 }
 
+function decimalToEth(dec) {
+    return eth(dec.toString());
+}
+
 function ethBnToDecimal(bn) {
     return Decimal(ethers.utils.formatEther(bn));
 }
@@ -50,9 +54,11 @@ describe('SuperSafe', function () {
         const Token = await ethers.getContractFactory('MockERC20');
         const token = await Token.deploy('Bucks', 'BCK', 18);
         await token.mint(depositor.address, ethers.utils.parseEther('1000000'));
+        await token.mint(depositor2.address, ethers.utils.parseEther('1000000'));
 
-        const token2 = await Token.deploy('Plata', 'PLT', 6);
+        const token2 = await Token.deploy('Plata', 'PLT', 18);
         await token2.mint(depositor.address, ethers.utils.parseEther('1000000'));
+        await token2.mint(depositor2.address, ethers.utils.parseEther('1000000'));
 
         return { safe, token, token2, owner, depositor, depositor2 };
     }
@@ -139,6 +145,20 @@ describe('SuperSafe', function () {
                     safe.connect(depositor).deposit(token.address, SMALL_DEPOSIT, { value: SMALL_DEPOSIT })
                 ).to.be.revertedWithCustomError(safe, 'NonNativeDepositMustNotSendNative');
             });
+            it('should fail if zero address', async function () {
+                const { safe, token, depositor } = await loadFixture(deploySafe);
+                await token.connect(depositor).approve(safe.address, SMALL_DEPOSIT);
+                await expect(
+                    safe.connect(depositor).deposit(ethers.constants.AddressZero, SMALL_DEPOSIT)
+                ).to.be.revertedWithCustomError(safe, 'ZeroAddress');
+            });
+            it('should fail if zero amount', async function () {
+                const { safe, token, depositor } = await loadFixture(deploySafe);
+                await token.connect(depositor).approve(safe.address, SMALL_DEPOSIT);
+                await expect(
+                    safe.connect(depositor).deposit(token.address, 0)
+                ).to.be.revertedWithCustomError(safe, 'ZeroAmount');
+            });
             it('should emit event', async function () {
                 const { safe, token, depositor } = await loadFixture(deploySafe);
                 await token.connect(depositor).approve(safe.address, SMALL_DEPOSIT);
@@ -149,20 +169,7 @@ describe('SuperSafe', function () {
         });
     });
 
-    describe('Withdrawals and fees', function () {
-        it('should not collect fees if not owner', async function () {
-            const { safe, token, depositor } = await loadFixture(deploySafe);
-            await expect(safe.connect(depositor).collectFees(token.address, depositor.address)).to.be.revertedWith(
-                'Ownable: caller is not the owner'
-            );
-        });
-        it('should not collect fees to a zero address', async function () {
-            const { safe, token, owner } = await loadFixture(deploySafe);
-            await expect(safe.connect(owner).collectFees(token.address, ethers.constants.AddressZero)).to.be.revertedWithCustomError(
-                safe,
-                'ZeroAddress'
-            );
-        });
+    describe('Withdrawals', function () {
         describe('Native asset', function () {
             it('should not withdraw if not deposited', async function () {
                 const { safe, depositor } = await loadFixture(deploySafe);
@@ -209,24 +216,24 @@ describe('SuperSafe', function () {
             it.skip('should collect fees', async function () {
                 const { safe, depositor, owner } = await loadFixture(deploySafe);
                 expect(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS)).to.eq('0');
-                
+
                 const depositTime = await getTimestamp(
                     await safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {
                         value: eth('1000')
                     })
                 );
                 await time.increaseTo(depositTime + DAY_SECONDS);
-                
+
                 const expectedFee = Decimal('1000').mul(DAILY_FEE_PERCENT);
                 const fee = ethBnToDecimal(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS));
                 expect(fee).to.be.decimal.closeTo(expectedFee, '0.0000001');
-                console.log('expectedFee', expectedFee);
+                // console.log('expectedFee', expectedFee);
 
                 const initBalance = ethBnToDecimal(await owner.getBalance());
-                console.log(initBalance);
-                
+                // console.log(initBalance);
+
                 await safe.connect(owner).collectFees(NATIVE_TOKEN_ADDRESS, owner.address);
-                console.log(ethBnToDecimal(await owner.getBalance()))
+                // console.log(ethBnToDecimal(await owner.getBalance()));
                 expect(ethBnToDecimal(await owner.getBalance())).to.be.decimal.closeTo(
                     initBalance.add(fee),
                     '0.0000001'
@@ -254,15 +261,10 @@ describe('SuperSafe', function () {
                 await time.increaseTo(depositTime + DAY_SECONDS);
                 const fee = Decimal('1000').mul(DAILY_FEE_PERCENT);
                 const toWithdraw = Decimal('1000').sub(fee);
-                const available = ethBnToDecimal(
-                    await safe.availableForWithdrawal(token.address, depositor.address)
-                );
+                const available = ethBnToDecimal(await safe.availableForWithdrawal(token.address, depositor.address));
                 expect(available).to.be.decimal.closeTo(toWithdraw, '0.0000000001');
                 const initBalance = ethBnToDecimal(await token.balanceOf(depositor.address));
-                await expect(safe.connect(depositor).withdraw(token.address)).to.emit(
-                    safe,
-                    'WithdrawalExecuted'
-                );
+                await expect(safe.connect(depositor).withdraw(token.address)).to.emit(safe, 'WithdrawalExecuted');
                 // TODO, need to test the event with precission
                 // .withArgs(NATIVE_TOKEN_ADDRESS, depositor.address, await safe.availableForWithdrawal(NATIVE_TOKEN_ADDRESS, depositor.address));
 
@@ -280,6 +282,20 @@ describe('SuperSafe', function () {
     });
 
     describe('Fees', function () {
+        it('should not collect fees if not owner', async function () {
+            const { safe, token, depositor } = await loadFixture(deploySafe);
+            await expect(safe.connect(depositor).collectFees(token.address, depositor.address)).to.be.revertedWith(
+                'Ownable: caller is not the owner'
+            );
+        });
+
+        it('should not collect fees to a zero address', async function () {
+            const { safe, token, owner } = await loadFixture(deploySafe);
+            await expect(
+                safe.connect(owner).collectFees(token.address, ethers.constants.AddressZero)
+            ).to.be.revertedWithCustomError(safe, 'ZeroAddress');
+        });
+
         it('should increment fees with time', async function () {
             const { safe, depositor } = await loadFixture(deploySafe);
 
@@ -313,17 +329,97 @@ describe('SuperSafe', function () {
             expect(ownerFees).to.be.eq(currentFees);
         });
 
+        it('should not withdraw if all the fees go the owner', async function () {
+            const { safe, depositor } = await loadFixture(deploySafe);
+            await safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {
+                value: eth('1000')
+            });
+            await time.increase(10000000000000000000000000);
+            expect(await safe.currentDepositorFees(NATIVE_TOKEN_ADDRESS, depositor.address)).to.be.zero;
+            expect(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS)).to.eq(eth('1000'));
+        });
+
         describe('Multi asset', async function () {
             it('should increment fees with time and other deposits', async function () {
-                const { safe, depositor } = await loadFixture(deploySafe);
+                const { safe, token, token2, depositor, depositor2 } = await loadFixture(deploySafe);
+                await token.connect(depositor).approve(safe.address, ethers.constants.MaxUint256);
+                await token.connect(depositor2).approve(safe.address, ethers.constants.MaxUint256);
+                await token2.connect(depositor2).approve(safe.address, ethers.constants.MaxUint256);
+
+                // disable automine so deposits are instantaneous to simplify math
                 await network.provider.send('evm_setAutomine', [false]);
                 await safe.connect(depositor).deposit(NATIVE_TOKEN_ADDRESS, eth('1000'), {
                     value: eth('1000')
                 });
+                await safe.connect(depositor).deposit(token.address, eth('500'));
+                await safe.connect(depositor2).deposit(token.address, eth('2000'));
+                await safe.connect(depositor2).deposit(token2.address, eth('2000'));
                 await network.provider.send('evm_setAutomine', [true]);
-
                 await network.provider.send('evm_mine');
+
+                expect(await safe.currentDepositorFees(NATIVE_TOKEN_ADDRESS, depositor.address)).to.be.zero;
+                expect(await safe.currentDepositorFees(token.address, depositor.address)).to.be.zero;
+                expect(await safe.currentDepositorFees(token.address, depositor2.address)).to.be.zero;
+                expect(await safe.currentDepositorFees(token2.address, depositor2.address)).to.be.zero;
+
+                expect(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS)).to.be.zero;
+                expect(await safe.currentOwnerFees(token.address)).to.be.zero;
+                expect(await safe.currentOwnerFees(token2.address)).to.be.zero;
+
+                await time.increase(DAY_SECONDS);
+
+                // 1000 -> dep1 / n
+                expect(await safe.availableForWithdrawal(NATIVE_TOKEN_ADDRESS, depositor.address)).to.be.closeTo(
+                    decimalToEth(Decimal('1000').mul(Decimal('1').sub(DAILY_FEE_PERCENT))),
+                    eth('0.0000001')
+                );
+                expect(await safe.currentDepositorFees(NATIVE_TOKEN_ADDRESS, depositor.address)).to.be.closeTo(
+                    decimalToEth(DAILY_FEE_PERCENT.mul('1000')),
+                    eth('0.0000001')
+                );
+                // 500 -> dep1 / t1
+                expect(await safe.availableForWithdrawal(token.address, depositor.address)).to.be.closeTo(
+                    decimalToEth(Decimal('500').mul(Decimal('1').sub(DAILY_FEE_PERCENT))),
+                    eth('0.0000001')
+                );
+                expect(await safe.currentDepositorFees(token.address, depositor.address)).to.be.closeTo(
+                    decimalToEth(DAILY_FEE_PERCENT.mul('500')),
+                    eth('0.0000001')
+                );
+                // 2000 -> dep2 / t1
+                expect(await safe.availableForWithdrawal(token.address, depositor2.address)).to.be.closeTo(
+                    decimalToEth(Decimal('2000').mul(Decimal('1').sub(DAILY_FEE_PERCENT))),
+                    eth('0.0000001')
+                );
+                expect(await safe.currentDepositorFees(token.address, depositor2.address)).to.be.closeTo(
+                    decimalToEth(DAILY_FEE_PERCENT.mul('2000')),
+                    eth('0.0000001')
+                );
+                // 2000 -> dep2 / t2
+                expect(await safe.availableForWithdrawal(token2.address, depositor2.address)).to.be.closeTo(
+                    decimalToEth(Decimal('2000').mul(Decimal('1').sub(DAILY_FEE_PERCENT))),
+                    eth('0.0000001')
+                );
+                expect(await safe.currentDepositorFees(token2.address, depositor2.address)).to.be.closeTo(
+                    decimalToEth(DAILY_FEE_PERCENT.mul('2000')),
+                    eth('0.0000001')
+                );
+                
+                expect(await safe.currentOwnerFees(NATIVE_TOKEN_ADDRESS)).to.be.closeTo(
+                    decimalToEth(DAILY_FEE_PERCENT.mul('1000')),
+                    eth('0.0000001')
+                );
+                expect(await safe.currentOwnerFees(token.address)).to.be.closeTo(
+                    decimalToEth(DAILY_FEE_PERCENT.mul('2500')),
+                    eth('0.0000001')
+                );
+                expect(await safe.currentOwnerFees(token2.address)).to.be.closeTo(
+                    decimalToEth(DAILY_FEE_PERCENT.mul('2000')),
+                    eth('0.0000001')
+                );
             });
+
+            it.skip('should work with ERC20 of decimals other than 18');
         });
     });
 });
